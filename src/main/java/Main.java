@@ -53,32 +53,10 @@ public class Main {
 
     private static long positionOfRecordNear(File bam, long start, long positionToFind) throws IOException, InstantiationException, IllegalAccessException, InvocationTargetException {
         try (BlockCompressedInputStream blockCompressedInputStream = new BlockCompressedInputStream(bam)) {
-            long seekInitialPos = start;
 
-            Constructor[] declaredConstructors = BAMFileReader.class.getDeclaredConstructors();
-            Constructor<BAMFileReader> constructor = Seq.of(declaredConstructors).findFirst(
-                    c -> Arrays.equals(c.getParameterTypes(), new Class[]{
-                            BlockCompressedInputStream.class,
-                            File.class,
-                            Boolean.TYPE, Boolean.TYPE,
-                            String.class,
-                            ValidationStringency.class,
-                            SAMRecordFactory.class
-                    })
-            ).get();
+            BAMFileReader instance = createBamReader(bam, blockCompressedInputStream);
 
-            constructor.setAccessible(true);
-            BAMFileReader instance = constructor.newInstance(
-                    blockCompressedInputStream,
-                    new File(bam.getAbsolutePath() + ".bai"),
-                    false,
-                    false,
-                    "used for reporting",
-                    ValidationStringency.LENIENT,
-                    DefaultSAMRecordFactory.getInstance()
-            );
-
-            blockCompressedInputStream.seek(seekInitialPos);
+            blockCompressedInputStream.seek(start);
 
             CloseableIterator<SAMRecord> iterator = instance.getIterator();
             SAMRecord record = iterator.next();
@@ -88,6 +66,33 @@ public class Main {
 
             return blockCompressedInputStream.getPosition();
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static BAMFileReader createBamReader(File bam, BlockCompressedInputStream blockCompressedInputStream) throws InstantiationException, IllegalAccessException, InvocationTargetException {
+        Constructor[] declaredConstructors = BAMFileReader.class.getDeclaredConstructors();
+        // this is a huge hack to get round a package private constuctor
+        Constructor<BAMFileReader> constructor = Seq.of(declaredConstructors).findFirst(
+                c -> Arrays.equals(c.getParameterTypes(), new Class[]{
+                        BlockCompressedInputStream.class,
+                        File.class,
+                        Boolean.TYPE, Boolean.TYPE,
+                        String.class,
+                        ValidationStringency.class,
+                        SAMRecordFactory.class
+                })
+        ).get();
+
+        constructor.setAccessible(true);
+        return constructor.newInstance(
+                blockCompressedInputStream,
+                new File(bam.getAbsolutePath() + ".bai"),
+                false,
+                false,
+                "used for reporting",
+                ValidationStringency.LENIENT,
+                DefaultSAMRecordFactory.getInstance()
+        );
     }
 
     private static List<Chunk> getChunks(SamReader samReader, String chromosome, int start, int end) {
